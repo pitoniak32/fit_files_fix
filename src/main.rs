@@ -1,16 +1,61 @@
-
-use std::{fs::File, path::PathBuf};
+use anyhow::Result;
 use clap::Parser;
-use reqwest::{blocking::multipart, Error};
+use clap_verbosity_flag::LevelFilter;
+use reqwest::blocking::multipart;
 use serde::Deserialize;
+use std::fs::File;
+
+fn main() -> Result<()> {
+    let args = Args::parse();
+
+    env_logger::builder()
+        .filter(Some("fitff"), LevelFilter::Info)
+        .filter_level(args.verbosity.log_level_filter())
+        .parse_default_env()
+        .init();
+
+    let fitfiletools = format!(
+        "https://www.fitfiletools.com/tools/devicechanger?devicetype={}&mfgr={}",
+        args.devicetype, args.manufacturer
+    );
+    log::debug!("calling: {}", fitfiletools);
+
+    let client = reqwest::blocking::Client::new();
+
+    let inputfile_path = std::path::Path::new(&args.input_file);
+    log::debug!("checking if file exists at {}", &args.input_file);
+    assert!(inputfile_path.exists(), "input file path needs to exist");
+
+    let res = client
+        .post(fitfiletools)
+        .multipart(multipart::Form::new().file("file", args.input_file)?)
+        .send()?;
+    let json_body: FixedFitFileResponse = serde_json::from_str(&res.text()?)?;
+    log::debug!("body = {:#?}", json_body);
+
+    let output_file = format!(
+        "{}_{}",
+        &args.output_file.replace(".fit", ""),
+        &json_body.id
+    );
+    log::debug!("file output path = {}", output_file);
+
+    let mut res = client.get(json_body.file).send()?;
+    let mut file = File::create(&output_file).expect("file should be able to be created");
+
+    std::io::copy(&mut res, &mut file).expect("file was copied");
+    log::info!("file was downloaded to: {}", &output_file);
+
+    Ok(())
+}
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct FixedFitFileResponse {
-    message: String,
     file: String,
     id: String,
-    ext_data: Option<String>,
+    _message: String,
+    _ext_data: Option<String>,
 }
 
 #[derive(Parser, Debug)]
@@ -28,31 +73,10 @@ struct Args {
     #[arg(short, long)]
     input_file: String,
 
-    /// Location of where you would like the fixed fit file to be downloaded.
+    /// ex: `/tmp/fit_file` will be downloaded to `/tmp/fit_file_{uuid}.fit`
     #[arg(short, long)]
-    output_file: PathBuf,
-}
+    output_file: String,
 
-fn main() -> Result<(), Error>{
-    let args = Args::parse();
-
-    // enduro2 = 4341, garmin = 1
-    let fitfiletools = format!("https://www.fitfiletools.com/tools/devicechanger?devicetype={}&mfgr={}", args.devicetype, args.manufacturer);
-
-    // TODO: add env_logger, and verbosity flags
-    // TODO: do some checks on the input and output file paths to make sure they are valid.
-
-    let client = reqwest::blocking::Client::new();
-    let res = client.post(fitfiletools).multipart(multipart::Form::new().file("file", args.input_file).unwrap()).send()?;
-    let json_body: FixedFitFileResponse = serde_json::from_str(&res.text().unwrap()).unwrap();
-
-    println!("body = {:#?}", json_body);
-
-    let mut res = client.get(json_body.file).send()?;
-    let mut file = File::create(&json_body.id).expect("file should be able to get created");
-    std::io::copy(&mut res, &mut file).expect("file was copied");
-
-    println!("file was downloaded to: {}", &json_body.id);
-
-    Ok(())
+    #[clap(flatten)]
+    pub verbosity: clap_verbosity_flag::Verbosity,
 }
