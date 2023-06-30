@@ -9,7 +9,7 @@ repository = "https://github.com/pitoniak32/fitff"
 
 [dependencies]
 anyhow = "1.0.71"
-clap = { version = "4.3.8", features = ["derive"] }
+clap = { version = "4.3.8", features = ["derive", "env"] }
 clap-verbosity-flag = "2.0.1"
 env_logger = "0.10.0"
 glob = "0.3.1"

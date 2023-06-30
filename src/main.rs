@@ -3,6 +3,7 @@ use clap::Parser;
 use glob::glob;
 use reqwest::blocking::multipart;
 use serde::Deserialize;
+use tokio::task::JoinHandle;
 use std::{fs::File, path::PathBuf, vec};
 
 #[tokio::main]
@@ -19,34 +20,35 @@ async fn main() -> Result<()> {
         args.devicetype.clone(),
         args.manufacturer.clone()
     );
+    log::debug!("uri: {}", fitfiletools_api_uri);
 
     let files = match get_search_strategy(args.input_file, args.search_dir, args.glob_pattern)
-        .expect("This should not be possible, you must provide one parameter.")
+        .expect("You must provide one input type parameter.")
     {
         SearchStrategy::Glob(glob_path) => expand_paths(glob_path),
         SearchStrategy::File(file_path) => vec![file_path],
     };
 
-    let mut threads = Vec::new();
-
-    for file in files {
+    let threads: Vec<JoinHandle<()>> = files.into_iter().map(|f| {
         let uri = fitfiletools_api_uri.clone();
         let output_dir = args.output_dir.clone();
         let output_prefix = args.output_prefix.clone();
-        threads.push(tokio::spawn(async move {
-            let inputfile_path = std::path::Path::new(&file);
-            log::trace!("check if file exists at: {}", &file);
-            assert!(inputfile_path.exists(), "input file path needs to exist");
+        let inputfile_path = std::path::Path::new(&f).clone();
+        let file = f.clone();
+        log::trace!("check if file exists at: {}", &file);
+        assert!(inputfile_path.exists(), "input file path needs to exist");
 
-            let client = reqwest::blocking::Client::new();
-            let res = client
-                .post(uri.clone())
-                .multipart(multipart::Form::new().file("file", file.clone()).unwrap())
-                .send()
-                .unwrap();
-            let json_body: FixedFitFileApiResponse =
-                serde_json::from_str(&res.text().unwrap()).unwrap();
-            log::debug!("body = {:#?}", json_body);
+        tokio::spawn(async move {
+
+            // let client = reqwest::blocking::Client::new();
+            // let res = client
+            //     .post(uri.clone())
+            //     .multipart(multipart::Form::new().file("file", file.clone()).unwrap())
+            //     .send()
+            //     .unwrap();
+            // let json_body: FixedFitFileApiResponse =
+            //     serde_json::from_str(&res.text().unwrap()).unwrap();
+            // log::debug!("body = {:#?}", json_body);
 
             let output_file_path = get_output_file_path(
                 get_output_dir(output_dir, file.clone()),
@@ -56,22 +58,22 @@ async fn main() -> Result<()> {
                     .unwrap()
                     .to_string_lossy()
                     .to_string(),
-                json_body.id,
-                // "123abc".to_string(),
+                // json_body.id,
+                "123abc".to_string(),
             );
 
-            let mut res = client.get(json_body.file).send().unwrap();
-            let mut file =
-                File::create(&output_file_path).expect("file should be able to be created");
-            std::io::copy(&mut res, &mut file).expect("file was copied");
+            // let mut res = client.get(json_body.file).send().unwrap();
+            // let mut file =
+            //     File::create(&output_file_path).expect("file should be able to be created");
+            // std::io::copy(&mut res, &mut file).expect("file was copied");
 
-            // tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
             log::info!(
                 "file was downloaded to: {}",
                 &output_file_path.to_string_lossy().to_string()
             );
-        }));
-    }
+        })
+    }).collect();
 
     for t in threads {
         t.await.unwrap()
@@ -101,7 +103,7 @@ struct Args {
     devicetype: u64,
 
     /// garmin = 1
-    #[arg(short, long, default_value = "1")]
+    #[arg(short, long, env = "MFG", default_value = "1")]
     manufacturer: u64,
 
     /// Location of the fit file that you would like to update.
