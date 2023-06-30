@@ -27,45 +27,54 @@ async fn main() -> Result<()> {
         SearchStrategy::File(file_path) => vec![file_path],
     };
 
+    let mut threads = Vec::new();
+
     for file in files {
-        log::debug!("{file:#?}");
-        // let uri = fitfiletools_api_uri.clone();
-        // let output = args.output_file.clone();
-        // tokio::spawn(async move {
-        //     let inputfile_path = std::path::Path::new(&file);
-        //     log::trace!("check if file exists at: {}", &file);
-        //     assert!(inputfile_path.exists(), "input file path needs to exist");
-        //
-        //     let client = reqwest::blocking::Client::new();
-        //     let res = client
-        //         .post(uri.clone())
-        //         .multipart(multipart::Form::new().file("file", file).unwrap())
-        //         .send()
-        //         .unwrap();
-        //     let json_body: FixedFitFileApiResponse =
-        //         serde_json::from_str(&res.text().unwrap()).unwrap();
-        //     log::debug!("body = {:#?}", json_body);
-        //
-        //
+        let uri = fitfiletools_api_uri.clone();
+        let output_dir = args.output_dir.clone();
+        let output_prefix = args.output_prefix.clone();
+        threads.push(tokio::spawn(async move {
+            let inputfile_path = std::path::Path::new(&file);
+            log::trace!("check if file exists at: {}", &file);
+            assert!(inputfile_path.exists(), "input file path needs to exist");
 
-        let output_file_path = get_output_file_path(
-            get_output_dir(args.output_dir.clone(), file.clone()),
-            args.output_prefix.clone(),
-            PathBuf::from(file)
-                .file_name()
-                .unwrap()
-                .to_string_lossy()
-                .to_string(),
-            "123abc".to_string(),
-        );
-        log::debug!("out_path: {:#?}", output_file_path,);
+            let client = reqwest::blocking::Client::new();
+            let res = client
+                .post(uri.clone())
+                .multipart(multipart::Form::new().file("file", file.clone()).unwrap())
+                .send()
+                .unwrap();
+            let json_body: FixedFitFileApiResponse =
+                serde_json::from_str(&res.text().unwrap()).unwrap();
+            log::debug!("body = {:#?}", json_body);
 
-        //
-        //     let mut res = client.get(json_body.file).send().unwrap();
-        //     let mut file = File::create(&output_file).expect("file should be able to be created");
-        //     std::io::copy(&mut res, &mut file).expect("file was copied");
-        //     log::info!("file was downloaded to: {}", &output_file);
-        // });
+            let output_file_path = get_output_file_path(
+                get_output_dir(output_dir, file.clone()),
+                output_prefix,
+                PathBuf::from(file)
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string(),
+                json_body.id,
+                // "123abc".to_string(),
+            );
+
+            let mut res = client.get(json_body.file).send().unwrap();
+            let mut file =
+                File::create(&output_file_path).expect("file should be able to be created");
+            std::io::copy(&mut res, &mut file).expect("file was copied");
+
+            // tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+            log::info!(
+                "file was downloaded to: {}",
+                &output_file_path.to_string_lossy().to_string()
+            );
+        }));
+    }
+
+    for t in threads {
+        t.await.unwrap()
     }
 
     Ok(())
@@ -155,9 +164,7 @@ fn get_output_file_path(
 ) -> PathBuf {
     dir.join(format!(
         "{}{}_{}.fit",
-        prefix
-            .and_then(|p| Some(format!("{p}_")))
-            .unwrap_or_default(),
+        prefix.map(|p| format!("{p}_")).unwrap_or_default(),
         file_name.replace(".fit", ""),
         id
     ))
