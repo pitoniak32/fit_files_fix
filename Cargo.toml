@@ -14,9 +14,10 @@ clap-verbosity-flag = "2.0.1"
 env_logger = "0.10.0"
 glob = "0.3.1"
 log = "0.4.19"
-reqwest = { version = "0.11.18", features = ["blocking", "multipart"] }
+reqwest = { version = "0.11.18", features = ["blocking", "multipart", "stream"] }
 serde = { version = "1.0.164", features = ["derive"] }
 serde_derive = "1.0.164"
 serde_json = "1.0.99"
 tokio = { version = "1.28.2", features = ["full"] }
+tokio-util = { version = "0.7.8", features = ["codec"] }
 url = "2.4.0"

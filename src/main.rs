@@ -3,11 +3,9 @@ use clap::Parser;
 use glob::glob;
 use reqwest::blocking::multipart;
 use serde::Deserialize;
-use tokio::task::JoinHandle;
 use std::{fs::File, path::PathBuf, vec};
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     let args = Args::parse();
 
     env_logger::builder()
@@ -20,63 +18,49 @@ async fn main() -> Result<()> {
         args.devicetype.clone(),
         args.manufacturer.clone()
     );
-    log::debug!("uri: {}", fitfiletools_api_uri);
 
     let files = match get_search_strategy(args.input_file, args.search_dir, args.glob_pattern)
-        .expect("You must provide one input type parameter.")
+        .expect("This should not be possible, you must provide one parameter.")
     {
         SearchStrategy::Glob(glob_path) => expand_paths(glob_path),
         SearchStrategy::File(file_path) => vec![file_path],
     };
 
-    let threads: Vec<JoinHandle<()>> = files.into_iter().map(|f| {
-        let uri = fitfiletools_api_uri.clone();
-        let output_dir = args.output_dir.clone();
-        let output_prefix = args.output_prefix.clone();
-        let inputfile_path = std::path::Path::new(&f).clone();
-        let file = f.clone();
+    for file in files {
+        log::debug!("{file:#?}");
+        let inputfile_path = std::path::Path::new(&file);
         log::trace!("check if file exists at: {}", &file);
         assert!(inputfile_path.exists(), "input file path needs to exist");
 
-        tokio::spawn(async move {
+        let client = reqwest::blocking::Client::new();
+        let res = client
+            .post(&fitfiletools_api_uri)
+            .multipart(multipart::Form::new().file("file", file.clone()).unwrap())
+            .send()
+            .unwrap();
+        let json_body: FixedFitFileApiResponse =
+            serde_json::from_str(&res.text().unwrap()).unwrap();
+        log::debug!("body = {:#?}", json_body);
 
-            // let client = reqwest::blocking::Client::new();
-            // let res = client
-            //     .post(uri.clone())
-            //     .multipart(multipart::Form::new().file("file", file.clone()).unwrap())
-            //     .send()
-            //     .unwrap();
-            // let json_body: FixedFitFileApiResponse =
-            //     serde_json::from_str(&res.text().unwrap()).unwrap();
-            // log::debug!("body = {:#?}", json_body);
+        let output_file_path = get_output_file_path(
+            get_output_dir(args.output_dir.clone(), file.clone()),
+            args.output_prefix.clone(),
+            PathBuf::from(file)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string(),
+            "123abc".to_string(),
+        );
+        log::debug!("out_path: {:#?}", output_file_path,);
 
-            let output_file_path = get_output_file_path(
-                get_output_dir(output_dir, file.clone()),
-                output_prefix,
-                PathBuf::from(file)
-                    .file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .to_string(),
-                // json_body.id,
-                "123abc".to_string(),
-            );
-
-            // let mut res = client.get(json_body.file).send().unwrap();
-            // let mut file =
-            //     File::create(&output_file_path).expect("file should be able to be created");
-            // std::io::copy(&mut res, &mut file).expect("file was copied");
-
-            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-            log::info!(
-                "file was downloaded to: {}",
-                &output_file_path.to_string_lossy().to_string()
-            );
-        })
-    }).collect();
-
-    for t in threads {
-        t.await.unwrap()
+        let mut res = client.get(json_body.file).send().unwrap();
+        let mut file = File::create(&output_file_path).expect("file should be able to be created");
+        std::io::copy(&mut res, &mut file).expect("file was copied");
+        log::info!(
+            "file was downloaded to: {}",
+            &output_file_path.to_string_lossy().to_string()
+        );
     }
 
     Ok(())
