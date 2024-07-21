@@ -82,7 +82,13 @@ struct Args {
     #[clap(flatten)]
     pub verbosity: clap_verbosity_flag::Verbosity,
 
-    /// enduro2 = 4341
+    /// The ProductID of your device to change the file to
+    ///
+    /// Export an activity recorded with your device as TCX
+    /// from Garmin Connect Search for ProductID.
+    ///
+    /// ex for enduro2:
+    /// <ProductID>4341</ProductID>
     #[arg(short, long, default_value = "4341")]
     devicetype: u64,
 
