@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
+use clap_verbosity_flag::InfoLevel;
 use glob::glob;
 use reqwest::blocking::multipart;
 use serde::Deserialize;
@@ -80,7 +81,7 @@ struct FixedFitFileApiResponse {
 #[command(author, version, about, long_about = None)]
 struct Args {
     #[clap(flatten)]
-    pub verbosity: clap_verbosity_flag::Verbosity,
+    pub verbosity: clap_verbosity_flag::Verbosity<InfoLevel>,
 
     /// The ProductID of your device to change the file to
     ///
