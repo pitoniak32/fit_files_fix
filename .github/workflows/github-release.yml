@@ -1,0 +1,15 @@
+name: GH Release Build
+'on':
+  workflow_dispatch: {}
+  push:
+    tags:
+    - 'v*.*.*'
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  release:
+    uses: pitoniak32/actions/.github/workflows/rust-gh-release.yml@main
+    with:
+      artifact-name: fitff
+    secrets: inherit

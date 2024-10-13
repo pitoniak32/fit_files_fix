@@ -71,7 +71,7 @@ fn main() -> Result<()> {
 #[serde(rename_all = "camelCase")]
 struct FixedFitFileApiResponse {
     file: String,
-    id: String,
+    _id: String,
     _message: String,
     _ext_data: Option<String>,
 }
