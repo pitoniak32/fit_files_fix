@@ -1,0 +1,8 @@
+name: Cargo Build & Test
+on:
+  push:
+    branches:
+      - '**'
+jobs:
+   ci:
+    uses: pitoniak32/actions/.github/workflows/rust-ci.yml@main
