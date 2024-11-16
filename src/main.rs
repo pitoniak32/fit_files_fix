@@ -1,10 +1,47 @@
 use anyhow::Result;
-use clap::Parser;
-use clap_verbosity_flag::InfoLevel;
-use glob::glob;
+
+use std::{fs::File, path::PathBuf};
+
 use reqwest::blocking::multipart;
 use serde::Deserialize;
-use std::{fs::File, path::PathBuf, vec};
+
+use clap::Parser;
+use clap_verbosity_flag::InfoLevel;
+
+/// Usage: this that and the other thing
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[clap(flatten)]
+    pub verbosity: clap_verbosity_flag::Verbosity<InfoLevel>,
+
+    /// The ProductID of your device to change the file to
+    ///
+    /// Export an activity recorded with your device as TCX
+    /// from Garmin Connect Search for ProductID.
+    ///
+    /// ex for enduro2:
+    /// <ProductID>4341</ProductID>
+    #[arg(short, long, default_value = "4341")]
+    devicetype: u64,
+
+    /// garmin = 1
+    #[arg(short, long, env = "MFG", default_value = "1")]
+    manufacturer: u64,
+
+    /// Location of the fit file(s) that you would like to update.
+    #[arg(short, long, required = true)]
+    input_files: Vec<String>,
+
+    /// ex: `fit_file` will be downloaded to `fit_file_{input_file_name}_{uuid}.fit`
+    #[arg(long)]
+    output_prefix: Option<String>,
+
+    /// ex: `/tmp/fit_file/` will be downloaded to `/tmp/fit_file/{file_path}.fit`
+    /// If this is not provided the input_file parent dir will be used.
+    #[arg(long)]
+    output_dir: Option<String>,
+}
 
 fn main() -> Result<()> {
     let args = Args::parse();
@@ -14,19 +51,17 @@ fn main() -> Result<()> {
         .parse_default_env()
         .init();
 
+    log::debug!("{:#?}", args.input_files);
+
     let fitfiletools_api_uri = format!(
         "https://www.fitfiletools.com/tools/devicechanger?devicetype={}&mfgr={}",
         args.devicetype.clone(),
         args.manufacturer.clone()
     );
 
-    let files = match (args.input_file, args.glob_pattern) {
-        (None, Some(glob)) => expand_paths(PathBuf::from(glob).to_string_lossy().to_string()),
-        (Some(file), None) => vec![file],
-        _ => unreachable!(),
-    };
+    log::debug!("{fitfiletools_api_uri}");
 
-    for file in files {
+    for file in args.input_files {
         log::debug!("{file:#?}");
         let inputfile_path = std::path::Path::new(&file);
         log::trace!("check if file exists at: {}", &file);
@@ -50,7 +85,7 @@ fn main() -> Result<()> {
                 .unwrap()
                 .to_string_lossy()
                 .to_string(),
-            "123abc".to_string(),
+            uuid::Uuid::new_v4().to_string(),
         );
         log::debug!("out_path: {:#?}", output_file_path,);
 
@@ -73,63 +108,6 @@ struct FixedFitFileApiResponse {
     _id: String,
     _message: String,
     _ext_data: Option<String>,
-}
-
-/// Usage: this that and the other thing
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-#[clap(
-    group(
-        clap::ArgGroup::new("files")
-            .args(&["glob_pattern", "input_file"])
-            .multiple(false)
-            .required(true)
-    )
-)]
-struct Args {
-    #[clap(flatten)]
-    pub verbosity: clap_verbosity_flag::Verbosity<InfoLevel>,
-
-    /// The ProductID of your device to change the file to
-    ///
-    /// Export an activity recorded with your device as TCX
-    /// from Garmin Connect Search for ProductID.
-    ///
-    /// ex for enduro2:
-    /// <ProductID>4341</ProductID>
-    #[arg(short, long, default_value = "4341")]
-    devicetype: u64,
-
-    /// garmin = 1
-    #[arg(short, long, env = "MFG", default_value = "1")]
-    manufacturer: u64,
-
-    /// Location of the fit file that you would like to update.
-    #[arg(short, long)]
-    input_file: Option<String>,
-
-    /// Glob pattern that matches all of the fit files that you would like to update.
-    #[arg(short, long)]
-    glob_pattern: Option<String>,
-
-    /// ex: `fit_file` will be downloaded to `fit_file_{input_file_name}_{uuid}.fit`
-    #[arg(long)]
-    output_prefix: Option<String>,
-
-    /// ex: `/tmp/fit_file/` will be downloaded to `/tmp/fit_file/{file_path}.fit`
-    /// If this is not provided the input_file parent dir will be used.
-    #[arg(long)]
-    output_dir: Option<String>,
-}
-
-fn expand_paths(search_glob_path: String) -> Vec<String> {
-    log::trace!("given glob: {:#?}", search_glob_path);
-    let files: Vec<String> = glob(&search_glob_path)
-        .unwrap()
-        .map(|r| r.unwrap().to_str().unwrap().to_string())
-        .collect();
-    log::trace!("files: {files:#?}");
-    files
 }
 
 fn get_output_file_path(
@@ -157,27 +135,6 @@ fn get_output_dir(output_dir: Option<String>, input_file: String) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(test)]
-    mod expand_paths {
-        use super::super::*;
-
-        #[test]
-        fn should_expand_glob() {
-            // Arrange
-            let cwd = std::env::current_dir().expect("should be able to get cwd");
-
-            // Act
-            let result = expand_paths(format!(
-                "{}{}*.toml",
-                cwd.to_str().expect("should be able to be converted to str"),
-                std::path::MAIN_SEPARATOR_STR,
-            ));
-
-            // Assert
-            assert_eq!(result, [cwd.join("Cargo.toml").to_str().unwrap()]);
-        }
-    }
-
     #[cfg(test)]
     mod get_output_dir {
         use super::super::*;

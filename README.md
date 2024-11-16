@@ -12,9 +12,9 @@ See the help menu for general options:
 fitff --help
 ```
 
-Convert a file using the default device and manufacturer:
+Convert file(s) using the default device and manufacturer:
 ```
-fitff --input-file ~/Downloads/{name-of-file}.fit
+fitff --input-file ~/Downloads/{name-of-file}.fit --input-file ~/Downloads/{other-file}.fit
 ```
 
 NOTE:
@@ -25,7 +25,12 @@ cargo run -- --input-file test.fit
 ```
 
 ## Install
-Only supported install method is through cargo currently
+
+### Releases
+
+See releases section.
+
+### Cargo
 
 ```
 cargo install fitff --locked

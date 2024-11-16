@@ -1,6 +1,6 @@
 [package]
 name = "fitff"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2021"
 authors = ["David Pitoniak (github: Pitoniak32)"]
 repository = "https://github.com/pitoniak32/fitff"
@@ -9,15 +9,13 @@ repository = "https://github.com/pitoniak32/fitff"
 
 [dependencies]
 anyhow = "1.0.71"
-clap = { version = "4.3.8", features = ["derive", "env"] }
+clap = { version = "4.5.21", features = ["derive", "env"] }
 clap-verbosity-flag = "2.0.1"
 env_logger = "0.10.0"
-glob = "0.3.1"
 log = "0.4.19"
 reqwest = { version = "0.11.18", features = ["blocking", "multipart", "stream"] }
-serde = { version = "1.0.164", features = ["derive"] }
-serde_derive = "1.0.164"
-serde_json = "1.0.99"
-tokio = { version = "1.28.2", features = ["full"] }
-tokio-util = { version = "0.7.8", features = ["codec"] }
-url = "2.4.0"
+
+serde = { version = "1.0.215", features = ["derive"] }
+serde_json = "1.0.132"
+
+uuid = { version = "1.11.0", features = ["fast-rng", "v4"] }
