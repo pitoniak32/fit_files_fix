@@ -1,6 +1,6 @@
 [package]
 name = "fitff"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["David Pitoniak (github: Pitoniak32)"]
 repository = "https://github.com/pitoniak32/fitff"
