@@ -1,5 +1,5 @@
 # fitff
-CLI for automating changes to device, and manufacturer fields on fit files.
+CLI for interacting with the fitfiletools API `https://www.fitfiletools.com/tools/devicechanger?devicetype={}&mfgr={}` to automate changes to device, and manufacturer fields on fit files.
 
 # Goal
 Be able to download fit files from Zwift, and convert them to show being recorded by my Garmin device so they are counted for challenges when uploaded to Garmin Connect.
