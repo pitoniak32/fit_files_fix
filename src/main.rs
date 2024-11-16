@@ -20,11 +20,10 @@ fn main() -> Result<()> {
         args.manufacturer.clone()
     );
 
-    let files = match get_search_strategy(args.input_file, args.search_dir, args.glob_pattern)
-        .expect("This should not be possible, you must provide one parameter.")
-    {
-        SearchStrategy::Glob(glob_path) => expand_paths(glob_path),
-        SearchStrategy::File(file_path) => vec![file_path],
+    let files = match (args.input_file, args.glob_pattern) {
+        (None, Some(glob)) => expand_paths(PathBuf::from(glob).to_string_lossy().to_string()),
+        (Some(file), None) => vec![file],
+        _ => unreachable!(),
     };
 
     for file in files {
@@ -79,6 +78,14 @@ struct FixedFitFileApiResponse {
 /// Usage: this that and the other thing
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
+#[clap(
+    group(
+        clap::ArgGroup::new("files")
+            .args(&["glob_pattern", "input_file"])
+            .multiple(false)
+            .required(true)
+    )
+)]
 struct Args {
     #[clap(flatten)]
     pub verbosity: clap_verbosity_flag::Verbosity<InfoLevel>,
@@ -102,12 +109,8 @@ struct Args {
     input_file: Option<String>,
 
     /// Glob pattern that matches all of the fit files that you would like to update.
-    #[arg(short, long, requires = "search_dir", conflicts_with = "input_file")]
+    #[arg(short, long)]
     glob_pattern: Option<String>,
-
-    /// Glob pattern that matches all of the fit files that you would like to update.
-    #[arg(short, long, requires = "glob_pattern", conflicts_with = "input_file")]
-    search_dir: Option<String>,
 
     /// ex: `fit_file` will be downloaded to `fit_file_{input_file_name}_{uuid}.fit`
     #[arg(long)]
@@ -120,33 +123,13 @@ struct Args {
 }
 
 fn expand_paths(search_glob_path: String) -> Vec<String> {
-    log::trace!("{:#?}", search_glob_path);
+    log::trace!("given glob: {:#?}", search_glob_path);
     let files: Vec<String> = glob(&search_glob_path)
         .unwrap()
         .map(|r| r.unwrap().to_str().unwrap().to_string())
         .collect();
     log::trace!("files: {files:#?}");
     files
-}
-
-enum SearchStrategy {
-    Glob(String),
-    File(String),
-}
-
-fn get_search_strategy(
-    input_file: Option<String>,
-    search_dir: Option<String>,
-    glob_pattern: Option<String>,
-) -> Option<SearchStrategy> {
-    match (input_file, search_dir, glob_pattern) {
-        (None, Some(dir), Some(glob)) => Some(SearchStrategy::Glob(
-            PathBuf::from(dir).join(glob).to_string_lossy().to_string(),
-        )),
-        (Some(file), None, None) => Some(SearchStrategy::File(file)),
-        (None, None, None) => None,
-        _ => None,
-    }
 }
 
 fn get_output_file_path(
@@ -174,37 +157,6 @@ fn get_output_dir(output_dir: Option<String>, input_file: String) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(test)]
-    mod get_search_strategy {
-        use super::super::*;
-
-        #[test]
-        fn should_return_none_when_all_params_are_none() {
-            // Arrange / Act / Assert
-            assert!(get_search_strategy(None, None, None).is_none())
-        }
-
-        #[test]
-        fn should_return_file_when_dir_and_glob_are_some() {
-            // Arrange / Act / Assert
-            assert!(
-                get_search_strategy(Some("/path/search/dir".to_string()), None, None)
-                    .is_some_and(|r| { matches!(r, SearchStrategy::File(..)) })
-            )
-        }
-
-        #[test]
-        fn should_return_glob_when_dir_and_glob_are_some() {
-            // Arrange / Act / Assert
-            assert!(get_search_strategy(
-                None,
-                Some("/path/search/dir".to_string()),
-                Some("glob_*.toml".to_string())
-            )
-            .is_some_and(|r| { matches!(r, SearchStrategy::Glob(..)) }))
-        }
-    }
-
     #[cfg(test)]
     mod expand_paths {
         use super::super::*;
