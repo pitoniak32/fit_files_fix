@@ -1,6 +1,13 @@
 use anyhow::Result;
 
-use std::{fs::File, path::PathBuf};
+use chrono::Utc;
+use glob::glob;
+use inquire::DateSelect;
+
+use std::{
+    fs::{self, File},
+    path::PathBuf,
+};
 
 use reqwest::blocking::multipart;
 use serde::Deserialize;
@@ -22,20 +29,26 @@ struct Args {
     ///
     /// ex for enduro2:
     /// <ProductID>4341</ProductID>
-    #[arg(short, long, default_value = "4341")]
+    #[arg(short, long, default_value_t = 4341)]
     devicetype: u64,
 
     /// garmin = 1
-    #[arg(short, long, env = "MFG", default_value = "1")]
+    #[arg(short, long, env = "MFG", default_value_t = 1)]
     manufacturer: u64,
 
     /// Location of the fit file(s) that you would like to update.
-    #[arg(short, long, required = true)]
+    #[arg(short, long)]
     input_files: Vec<String>,
+
+    #[arg(long)]
+    input_location: Option<PathBuf>,
 
     /// ex: `fit_file` will be downloaded to `fit_file_{input_file_name}_{uuid}.fit`
     #[arg(long)]
     output_prefix: Option<String>,
+
+    #[arg(long, default_value_t = false)]
+    cleanup: bool,
 
     /// ex: `/tmp/fit_file/` will be downloaded to `/tmp/fit_file/{file_path}.fit`
     /// If this is not provided the input_file parent dir will be used.
@@ -61,7 +74,38 @@ fn main() -> Result<()> {
 
     log::debug!("{fitfiletools_api_uri}");
 
-    for file in args.input_files {
+    let files = if let Some(loc) = args.input_location {
+        let date = DateSelect::new("What is the date of the activity file name?")
+            .with_max_date(Utc::now().date_naive())
+            .with_week_start(chrono::Weekday::Mon)
+            .prompt()?;
+
+        let pattern = PathBuf::new()
+            .join(loc)
+            .join(format!("{}-*.fit", date))
+            .to_string_lossy()
+            .to_string();
+        log::info!("pattern: {}", pattern);
+        let entries = glob(&pattern)
+            .expect("glob pattern should be valid")
+            .filter_map(|e| {
+                let entry_path = e.expect("All glob patterns should be valid");
+                let file_name = entry_path.to_string_lossy().to_string();
+                if !file_name.contains("_") {
+                    Some(file_name)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        log::info!("Matched Files: {entries:#?}");
+        entries
+    } else {
+        args.input_files
+    };
+
+    let mut outpaths: Vec<PathBuf> = vec![];
+    for file in files.clone() {
         log::debug!("{file:#?}");
         let inputfile_path = std::path::Path::new(&file);
         log::trace!("check if file exists at: {}", &file);
@@ -87,15 +131,39 @@ fn main() -> Result<()> {
                 .to_string(),
             uuid::Uuid::new_v4().to_string(),
         );
-        log::debug!("out_path: {:#?}", output_file_path,);
+        log::debug!("out_path: {:#?}", output_file_path);
 
         let mut res = client.get(json_body.file).send().unwrap();
         let mut file = File::create(&output_file_path).expect("file should be able to be created");
         std::io::copy(&mut res, &mut file).expect("file was copied");
+        outpaths.push(output_file_path.clone());
         log::info!(
             "file was downloaded to: {}",
             &output_file_path.to_string_lossy().to_string()
         );
+    }
+
+    if args.cleanup && !files.is_empty() {
+        let merged = outpaths
+            .iter()
+            .map(|fp| fp.to_string_lossy().to_string())
+            .collect::<Vec<_>>()
+            .into_iter()
+            .chain(files.iter().cloned())
+            .collect::<Vec<_>>();
+
+        let selected = inquire::MultiSelect::new("Select files to cleanup:", merged)
+            .with_all_selected_by_default()
+            .with_help_message(
+                "\n  ENTER will execute the cleanup\n  Make sure to upload the generated file BEFORE executing the cleanup!\n",
+            )
+            .prompt()
+            .unwrap();
+
+        selected.iter().for_each(|f| {
+            fs::remove_file(PathBuf::from(f)).expect("file to be removed successfully");
+            log::info!("Removed: {f}");
+        });
     }
 
     Ok(())
