@@ -6,6 +6,9 @@ To download fit files from Zwift, and convert them to show being recorded by my 
 
 This is tailored to my watch and manufacturer for convenience, but there is general instruction to find your ProductID if you don't want to use enduro2.
 
+# Demo
+https://github.com/user-attachments/assets/80fe6071-324e-4171-be79-7f9b8ac554f8
+
 ## Usage
 See the help menu for general options:
 ```
